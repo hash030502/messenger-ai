@@ -9,6 +9,17 @@ st.set_page_config(
     page_icon="💬",
     layout="wide"
 )
+st.markdown(
+    """
+    <style>
+    /* 모바일 환경에서 당겨서 새로고침(Pull-to-refresh) 방지 */
+    body {
+        overscroll-behavior-y: none;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # 시뮬레이션 대화 기록을 저장할 세션 상태
 if 'sim_history' not in st.session_state:
