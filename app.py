@@ -1,9 +1,10 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image  # 💡 이미지 처리를 위해 추가된 라이브러리
+from PIL import Image
+import datetime
 
 # ---------------------------------------------------
-# 페이지 설정 및 상태 초기화
+# 1. 페이지 설정 및 상태 초기화
 # ---------------------------------------------------
 st.set_page_config(
     page_title="TalkInsight",
@@ -11,11 +12,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# 모바일 환경에서 당겨서 새로고침(Pull-to-refresh) 방지
 st.markdown(
     """
     <style>
     body { overscroll-behavior-y: none; }
+    p, div[data-testid="stAlert"], div[data-testid="stMarkdownContainer"] {
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: pre-wrap !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -26,12 +31,35 @@ if 'sim_history' not in st.session_state:
 if 'analysis_result' not in st.session_state:
     st.session_state.analysis_result = None
 
-st.title("💬 TalkInsight")
-st.caption("(다자간 대화 & 시뮬레이션 지원)")
-st.caption("보안 정책에 따라 분석에 사용된 데이터는 저장되지 않고 즉시 휘발됩니다.")
+if 'usage_date' not in st.session_state:
+    st.session_state.usage_date = datetime.date.today()
+if 'daily_usage_count' not in st.session_state:
+    st.session_state.daily_usage_count = 0
+
+if st.session_state.usage_date != datetime.date.today():
+    st.session_state.usage_date = datetime.date.today()
+    st.session_state.daily_usage_count = 0
 
 # ---------------------------------------------------
-# AI 모델 자동 탐색
+# 2. 메인 타이틀 & PRO 구독 버튼 (가로 배치)
+# ---------------------------------------------------
+title_col, btn_col = st.columns([4, 1])
+
+with title_col:
+    st.title("💬 TalkInsight")
+    st.caption("(다자간 대화 & 시뮬레이션 지원)")
+    st.caption("보안 정책에 따라 분석에 사용된 데이터는 저장되지 않고 즉시 휘발됩니다.")
+
+with btn_col:
+    st.write("")
+    st.write("")
+    if st.button("👑 PRO 구독", key="pay_pro", use_container_width=True, type="primary"):
+        st.success("구독 완료!")
+
+st.divider()
+
+# ---------------------------------------------------
+# 3. AI 모델 자동 탐색 및 설정
 # ---------------------------------------------------
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -52,7 +80,7 @@ except Exception as e:
     st.stop()
 
 # ---------------------------------------------------
-# 사용자 및 대화 참여자 설정
+# 4. 사용자 및 대화 참여자 설정 UI
 # ---------------------------------------------------
 st.subheader("👤 대화 참여자 설정")
 
@@ -96,7 +124,7 @@ def get_participants_info_str():
     return info_str
 
 # ---------------------------------------------------
-# 내용 입력
+# 5. 내용 입력 UI (텍스트 & 이미지)
 # ---------------------------------------------------
 st.subheader("📝 대화 내용 입력")
 
@@ -104,11 +132,21 @@ text_data = st.text_area("메신저 대화 내용 (텍스트)", height=150)
 uploaded_files = st.file_uploader("대화 캡쳐 이미지 업로드", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
 # ---------------------------------------------------
-# AI 분석 로직
+# 6. AI 분석 로직
 # ---------------------------------------------------
 st.subheader(f"🤖 AI 대화 분석 (모델: {target_model_name})")
 
-if st.button("분석 시작"):
+MAX_LIMIT = 10  # 💡 하루 무료 사용 횟수를 10회로 증가!
+
+# 💡 버튼 아래에 텍스트를 배치하기 위해 버튼 클릭 여부를 변수로 저장
+analyze_btn_clicked = st.button("분석 시작")
+st.caption(f"💡 하루 {MAX_LIMIT}회 무료 제공 (오늘 남은 분석 및 대화 횟수: {MAX_LIMIT - st.session_state.daily_usage_count}회)")
+
+if analyze_btn_clicked:
+    if st.session_state.daily_usage_count >= MAX_LIMIT:
+        st.error(f"🚫 일일 무료 이용 횟수({MAX_LIMIT}회)를 모두 소진했습니다. 내일 다시 이용하시거나 PRO 요금제를 구독해 주세요!")
+        st.stop()
+
     if not text_data and not uploaded_files:
         st.error("텍스트를 입력하거나 이미지를 업로드해 주세요.")
         st.stop()
@@ -129,15 +167,14 @@ if st.button("분석 시작"):
 {text_data}
 
 [🚨 절대 준수해야 할 핵심 지시사항 🚨]
-1. 첨부된 사진이 있다면, **절대로 대화 내용을 스스로 상상하거나 지어내지 마세요.** 사진에 찍힌 카카오톡/메신저 말풍선 속 글자들만 100% 그대로 읽어내야 합니다.
+1. 첨부된 사진이 있다면, 절대로 대화 내용을 스스로 상상하거나 지어내지 마세요. 사진에 찍힌 말풍선 속 글자들만 100% 그대로 읽어내야 합니다.
 2. 사진 속 텍스트와 [입력된 대화 텍스트]를 모두 합쳐서 대화의 흐름을 파악하세요.
-3. 참여자별 심리 상태 분석 (MBTI, 관계, 대화 뉘앙스 기반)
+3. 참여자별 심리 상태 분석
 4. 현재 대화방의 분위기
 5. '{my_name}'이(가) 보낼 만한 추천 답장 3개 (각각의 이유 포함)
 6. 강력 추천 답장 1개
 """
             contents = [prompt]
-            # 💡 PIL Image 객체로 변환하여 구글 AI에 직접 전달 (인식률 100% 상향)
             if uploaded_files:
                 for uploaded_file in uploaded_files:
                     img = Image.open(uploaded_file)
@@ -145,19 +182,29 @@ if st.button("분석 시작"):
 
             response = model.generate_content(contents)
             st.session_state.analysis_result = response.text
-            st.success("분석 완료!")
+            
+            st.session_state.daily_usage_count += 1
+            st.rerun()  # 💡 횟수가 갱신되었으므로 화면을 새로고침하여 텍스트 반영
+            
         except Exception as e:
-            st.error(f"분석 중 오류 발생: {e}")
+            error_msg = str(e).lower()
+            if "429" in error_msg or "quota" in error_msg:
+                st.error("⏳ AI가 한 번에 너무 많은 데이터를 읽느라 잠시 지쳤어요! 1~2분 정도 숨을 고른 뒤에 다시 버튼을 눌러주세요.")
+            else:
+                st.error(f"❌ 분석 중 알 수 없는 오류가 발생했습니다: {e}")
 
 if st.session_state.analysis_result:
+    st.success(f"분석 완료!")
     st.markdown(st.session_state.analysis_result)
 
 st.divider()
 
 # ---------------------------------------------------
-# 시뮬레이션 로직
+# 7. 답장 시뮬레이션 로직
 # ---------------------------------------------------
 st.subheader("🎭 답장 시뮬레이션")
+# 💡 답장 시뮬레이션 텍스트 바로 아래에 안내 문구 추가
+st.caption(f"💡 하루 {MAX_LIMIT}회 무료 제공 (오늘 남은 분석 및 대화 횟수: {MAX_LIMIT - st.session_state.daily_usage_count}회)")
 
 if st.button("🔄 시뮬레이션 초기화"):
     st.session_state.sim_history = []
@@ -168,6 +215,10 @@ for msg in st.session_state.sim_history:
         st.markdown(msg["content"])
 
 if user_msg := st.chat_input("테스트해 볼 메시지를 입력하세요..."):
+    if st.session_state.daily_usage_count >= MAX_LIMIT:
+        st.error(f"🚫 일일 무료 대화 횟수({MAX_LIMIT}회)를 모두 소진했습니다. PRO 요금제 구독 시 무제한 대화가 가능합니다!")
+        st.stop()
+
     st.session_state.sim_history.append({"role": "user", "content": f"**{my_name}**: {user_msg}"})
     
     with st.chat_message("user"):
@@ -194,15 +245,13 @@ if user_msg := st.chat_input("테스트해 볼 메시지를 입력하세요...")
 {history_str}
 
 [🚨 절대 준수해야 할 핵심 지시사항 🚨]
-1. 첨부된 사진이 있다면, **절대로 기존 대화를 상상하거나 지어내지 마세요.** 사진에 실제로 적혀 있는 말풍선 내용만 참고하십시오.
-2. 입력된 텍스트와 첨부된 캡처 사진을 모두 참고하여 상대방(들)의 입장에서 방금 {my_name}이 보낸 메시지에 답장하세요.
+1. 첨부된 사진이 있다면, 절대로 기존 대화를 상상하거나 지어내지 마세요.
+2. 입력된 텍스트와 첨부된 캡처 사진을 모두 참고하여 상대방 입장에서 답장하세요.
 3. 사진 속 대화의 말투와 뉘앙스를 철저하게 모방하세요.
-4. 메신저 특성상 너무 길게 말하지 않고 짧고 자연스럽게 대답하세요.
-5. 분석이나 부가 설명 없이 오직 '답장 메시지'만 출력하세요.
-6. 다자간 대화일 경우 "이름: 대답" 형식으로 작성하세요.
+4. 너무 길게 말하지 않고 짧고 자연스럽게 대답하세요.
+5. 오직 '답장 메시지'만 출력하세요.
 """
             sim_contents = [sim_prompt]
-            # 💡 시뮬레이션에서도 PIL Image 객체 활용
             if uploaded_files:
                 for uploaded_file in uploaded_files:
                     img = Image.open(uploaded_file)
@@ -210,7 +259,13 @@ if user_msg := st.chat_input("테스트해 볼 메시지를 입력하세요...")
 
             response = model.generate_content(sim_contents)
             st.session_state.sim_history.append({"role": "assistant", "content": response.text.strip()})
+            
+            st.session_state.daily_usage_count += 1
             st.rerun()
                 
         except Exception as e:
-            st.error(f"시뮬레이션 중 오류 발생: {e}")
+            error_msg = str(e).lower()
+            if "429" in error_msg or "quota" in error_msg:
+                st.error("⏳ AI 상대방이 답장을 고민하느라 시간이 걸리네요! 1~2분만 기다렸다가 다시 메시지를 보내주세요.")
+            else:
+                st.error(f"❌ 시뮬레이션 중 알 수 없는 오류가 발생했습니다: {e}")
